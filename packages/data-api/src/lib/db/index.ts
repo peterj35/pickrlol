@@ -1,0 +1,5 @@
+export { deleteItem } from './deleteItem'
+export { getAllItems } from './getAllItems'
+export { putItem } from './putItem'
+export { queryItem } from './queryItem'
+export { updateItem } from './updateItem'

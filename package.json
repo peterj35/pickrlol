@@ -1,0 +1,33 @@
+{
+  "name": "oneveeone",
+  "version": "1.0.0",
+  "description": "Serverless backend and web UI for oneveeone",
+  "main": "index.js",
+  "repository": "https://gitlab.com/peterj35/oneveeone.git",
+  "author": "Peter Ju <peterju35@gmail.com>",
+  "license": "MIT",
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -v && tsc -b ./",
+    "prettier": "prettier --write ."
+  },
+  "devDependencies": {
+    "husky": "^4.3.8",
+    "prettier": "^2.2.1",
+    "pretty-quick": "^3.1.0",
+    "typescript": "^4.1.3"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "pretty-quick --staged"
+    }
+  },
+  "engines": {
+    "node": ">=14.0.0 <15.0.0",
+    "yarn": ">=1.15.0 < 2.0.0"
+  }
+}

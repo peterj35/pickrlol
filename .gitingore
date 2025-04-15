@@ -1,0 +1,9 @@
+build
+dist
+node_modules
+.serverless
+*.tsbuildinfo
+.env*
+.DS_Store
+packages/.DS_Store
+netlify.toml

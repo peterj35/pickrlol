@@ -1,0 +1,610 @@
+service: data-api
+
+frameworkVersion: '>=2.0.0 <3.0.0'
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-plugin-scripts
+  - serverless-jetpack
+
+provider:
+  name: aws
+  stage: ${{opt:stage, 'dev'}}
+  region: ${{opt:region, 'us-west-2'}}
+
+  # use ${{}} to access serverless variables
+  # this is necessary because cloudformation uses ${} syntax
+  variableSyntax: "\\${{([ ~:a-zA-Z0-9._\\'\",\\-\\/\\(\\)]+?)}}"
+
+  stackTags:
+    SERVICE: ${{self:service}}
+    STAGE: ${{self:provider.stage}}
+    REGION: ${{self:provider.region}}
+    VERSION: ${{file(./package.json):version}}
+
+  runtime: nodejs12.x
+  memorySize: 256
+  timeout: 28
+
+  environment:
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+
+  usagePlan:
+    quota:
+      limit: 1000
+      offset: 0
+      period: DAY
+    throttle:
+      burstLimit: 5000
+      rateLimit: 1000
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:BatchWriteItem
+        - dynamodb:BatchGetItem
+        - dynamodb:GetRecords
+        - dynamodb:GetShardIterator
+      Resource:
+        - Fn::GetAtt: [TopicsTable, Arn]
+        - Fn::Join: ['', [Fn::GetAtt: [TopicsTable, Arn], '/*']]
+
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:BatchWriteItem
+        - dynamodb:BatchGetItem
+        - dynamodb:GetRecords
+        - dynamodb:GetShardIterator
+      Resource:
+        - Fn::GetAtt: [TagsTable, Arn]
+        - Fn::Join: ['', [Fn::GetAtt: [TagsTable, Arn], '/*']]
+
+custom:
+  dotenv:
+    include:
+      - AMPLITUDE_API_KEY
+
+  jetpack:
+    # Search for hoisted dependencies
+    base: '../..'
+
+  scripts:
+    hooks:
+      # Builds Typescript prior to packaging
+      'before:package:createDeploymentArtifacts': yarn build
+
+functions:
+  createTopic:
+    handler: dist/topics.createTopic
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics'
+          method: post
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+
+  getTopics:
+    handler: dist/topics.getTopics
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      # IMPROVE: TAGS_TABLE_NAME does not need to be defined as env var for all functions
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics'
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+
+  getTopic:
+    handler: dist/topics.getTopic
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}'
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  incrementTopic:
+    handler: dist/topics.incrementTopic
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}/increment'
+          method: post
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  archiveTopic:
+    handler: dist/topics.archiveTopic
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}/archive'
+          method: put
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicsId: true
+
+  updateTopic:
+    handler: dist/topics.updateTopic
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}'
+          method: put
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  addTopicComment:
+    handler: dist/topics.createComment
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}/comment'
+          method: post
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  updateTopicComment:
+    handler: dist/topics.updateComment
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}/comment'
+          method: put
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  archiveTopicComment:
+    handler: dist/topics.archiveComment
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}/comment/archive'
+          method: put
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  modifyTopicCommentUpvote:
+    handler: dist/topics.modifyTopicCommentUpvote
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/topics/{topicId}/comment/upvote'
+          method: post
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+                topicId: true
+
+  getTags:
+    handler: dist/tags.getTags
+    provisionedConcurrency: null
+    environment:
+      TOPICS_TABLE_NAME:
+        Ref: TopicsTable
+      TAGS_TABLE_NAME:
+        Ref: TagsTable
+    events:
+      - http:
+          path: '{version}/tags'
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                version: true
+
+resources:
+  Resources:
+    # This response is needed for custom authorizer failures cors support
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+
+    GatewayResponseDefault5XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+
+    TopicsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+
+        KeySchema:
+          # select by topicId
+          - AttributeName: id
+            KeyType: HASH
+
+        BillingMode: PAY_PER_REQUEST
+
+    TagsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: name
+            AttributeType: S
+          - AttributeName: usedCount
+            AttributeType: N
+
+        KeySchema:
+          # query by tag name
+          - AttributeName: name
+            KeyType: HASH
+          # sort by usedCount
+          - AttributeName: usedCount
+            KeyType: RANGE
+
+        BillingMode: PAY_PER_REQUEST
+
+    # the s3 bucket to store screenshots
+    S3MediaBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      Properties:
+        # Allows uploads from third party domains
+        CorsConfiguration:
+          CorsRules:
+            - # Note: could be made more strict
+              AllowedHeaders:
+                - '*'
+              # No delete
+              AllowedMethods:
+                - HEAD
+                - GET
+                - PUT
+                - POST
+              AllowedOrigins:
+                - '*'
+              ExposedHeaders:
+                - x-amz-server-side-encryption
+                - x-amz-request-id
+                - x-amz-id-2
+                - ETag
+                - Date
+              MaxAge: 3000
+        # Abort incomplete multipart uploads after a timeout
+        # See https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html
+        LifecycleConfiguration:
+          Rules:
+            - Status: Enabled
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
+        # Enable s3 transfer acceleration for faster uploads
+        AccelerateConfiguration:
+          AccelerationStatus: Enabled
+
+    # bucket policy to allow for public GET access behind /public
+    S3MediaBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        PolicyDocument:
+          Id: AllowPublicReadPolicyDocument
+          Version: '2012-10-17'
+          Statement:
+            - Sid: PublicReadForGetBucketObjects
+              Effect: Allow
+              Principal: '*'
+              Action: 's3:GetObject'
+              Resource:
+                Fn::Join: ['', [Fn::GetAtt: [S3MediaBucket, Arn], '/public/*']]
+        Bucket:
+          Ref: S3MediaBucket
+
+    # cloudfront edge CDN in front of s3
+    CloudFrontCDN:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          # don't expose contents of the distribution unless specific path is requested
+          DefaultRootObject: ''
+          Enabled: true
+          PriceClass: PriceClass_All
+          ViewerCertificate:
+            CloudFrontDefaultCertificate: true
+          Origins:
+            - S3OriginConfig:
+                # this can be set in the future when we want to close direct access to the S3 bucket
+                OriginAccessIdentity: ''
+              DomainName:
+                Fn::GetAtt: [S3MediaBucket, DomainName]
+              Id: StorageS3Origin
+          DefaultCacheBehavior:
+            TargetOriginId: StorageS3Origin
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+            # cache screenshots/videos for a week
+            DefaultTTL: 604800
+            ViewerProtocolPolicy: redirect-to-https
+            ForwardedValues:
+              Cookies:
+                Forward: none
+              QueryString: false
+
+    # the cognito user pool used to store users
+    # we don't actually store users yet but this is necessary for
+    # unauthenticated requests too
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: false
+          UnusedAccountValidityDays: 7
+        AliasAttributes:
+          - email
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireLowercase: false
+            RequireNumbers: false
+            RequireSymbols: false
+            RequireUppercase: false
+        AutoVerifiedAttributes:
+          - email
+        Schema:
+          - Name: email
+            AttributeDataType: String
+            Mutable: false
+            Required: true
+
+    # the user pool client for the user pool to login with
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        GenerateSecret: false # should be false for web clients
+        UserPoolId:
+          Ref: CognitoUserPool
+
+    # the federated identity for our user pool to auth with
+    CognitoIdentityPool:
+      Type: AWS::Cognito::IdentityPool
+      Properties:
+        AllowUnauthenticatedIdentities: true # we allow unauthenticated uploads
+        CognitoIdentityProviders:
+          - ClientId:
+              Ref: CognitoUserPoolClient
+            ProviderName:
+              Fn::GetAtt: [CognitoUserPool, ProviderName]
+
+    # IAM roles used for (un)authenticated users
+    CognitoIdentityPoolRoles:
+      Type: AWS::Cognito::IdentityPoolRoleAttachment
+      Properties:
+        IdentityPoolId:
+          Ref: CognitoIdentityPool
+        Roles:
+          authenticated:
+            Fn::GetAtt: [CognitoAuthRole, Arn]
+          unauthenticated:
+            Fn::GetAtt: [CognitoUnauthRole, Arn]
+
+    # the IAM role used for authenticated users
+    CognitoAuthRole:
+      Type: AWS::IAM::Role
+      Properties:
+        Path: /
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: 'Allow'
+              Principal:
+                Federated: 'cognito-identity.amazonaws.com'
+              Action:
+                - 'sts:AssumeRoleWithWebIdentity'
+              Condition:
+                StringEquals:
+                  'cognito-identity.amazonaws.com:aud':
+                    Ref: CognitoIdentityPool
+                'ForAnyValue:StringLike':
+                  'cognito-identity.amazonaws.com:amr': authenticated
+        Policies:
+          - PolicyName: 'CognitoAuthorizedPolicy'
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: 'Allow'
+                  Action:
+                    - 'mobileanalytics:PutEvents'
+                    - 'cognito-sync:*'
+                    - 'cognito-identity:*'
+                  Resource: '*'
+
+    # the IAM role used for unauthenticated users
+    CognitoUnauthRole:
+      Type: AWS::IAM::Role
+      Properties:
+        Path: /
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: 'Allow'
+              Principal:
+                Federated: 'cognito-identity.amazonaws.com'
+              Action:
+                - 'sts:AssumeRoleWithWebIdentity'
+              Condition:
+                StringEquals:
+                  'cognito-identity.amazonaws.com:aud':
+                    Ref: CognitoIdentityPool
+                'ForAnyValue:StringLike':
+                  'cognito-identity.amazonaws.com:amr': unauthenticated
+        Policies:
+          - PolicyName: 'CognitoUnauthorizedPolicy'
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: 'Allow'
+                  Action:
+                    - 'mobileanalytics:PutEvents'
+                    - 'cognito-sync:*'
+                    - 'cognito-identity:*'
+                  Resource: '*'
+
+                # allow unauthenticated users to upload attachments to s3
+                # note: path should be made more restrictive and require a uuid
+                # of a fixed length
+                - Effect: 'Allow'
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:PutObject'
+                    - 's3:AbortMultipartUpload'
+                    - 's3:ListMultipartUploadParts'
+                  Resource:
+                    - Fn::Join:
+                        ['', [Fn::GetAtt: [S3MediaBucket, Arn], '/public/*']]
+
+  Outputs:
+    TopicsTableName:
+      Value:
+        Ref: TopicsTable
+
+    TagsTableName:
+      Value:
+        Ref: TagsTable
+
+    CloudFrontCDNID:
+      Value:
+        Ref: CloudFrontCDN
+
+    CloudFrontCDNDomain:
+      Value:
+        Fn::GetAtt: [CloudFrontCDN, DomainName]
+
+    S3MediaBucketName:
+      Value:
+        Ref: S3MediaBucket
+
+    S3MediaBucketArn:
+      Value:
+        Fn::GetAtt: [S3MediaBucket, Arn]
+
+    CognitoUserPoolId:
+      Description: id of the cognito user pool
+      Value:
+        Ref: CognitoUserPool
+
+    CognitoUserPoolClientId:
+      Description: id of the cognito user pool client
+      Value:
+        Ref: CognitoUserPoolClient
+
+    CognitoIdentityPoolId:
+      Description: id of the cognito identity pool
+      Value:
+        Ref: CognitoIdentityPool
